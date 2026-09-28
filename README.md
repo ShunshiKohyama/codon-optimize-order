@@ -77,6 +77,35 @@ suppression is the knob that actually buys synthesisability.
 The rationale for every setting, and what was rejected, is in
 [`docs/design.md`](docs/design.md). Read it before changing a parameter.
 
+## Initiation, not stability
+
+What this tool minimises is **secondary structure at the translation initiation
+region** — whether the ribosome can load. That is not the same thing as mRNA
+**stability**, which is how long the transcript survives before it is degraded.
+The two are distinct properties with different determinants, and the tool
+optimises only the first.
+
+In *E. coli* they interact, mildly and in opposite directions. A 5′ stem-loop
+*protects* a transcript from RNase E, so removing structure removes some of that
+protection. In practice the effect runs the other way overall, because a
+well-translated message is shielded by its own ribosomes — so raising initiation
+usually raises half-life too. Structure is not a lever worth pulling for
+stability here.
+
+**Which lever matters depends on the host, and the order can invert:**
+
+| host | 5′ structure at the start | codon adaptation (CAI) |
+|---|---|---|
+| *E. coli* | **dominant** — 44 % of the variance in protein level (Kudla 2009) | weak |
+| other bacteria | expected to carry over: SD/anti-SD pairing and 30S loading are broadly conserved, though the −4…+37 window was measured in *E. coli* | weak |
+| yeast and other eukaryotes | **does not carry over** — initiation is cap-dependent scanning, so what matters is structure in the 5′UTR and the Kozak context, not the first 20 codons of the CDS | **matters** — codon optimality slows deadenylation and stabilises the mRNA (Presnyak 2015) |
+
+So for a eukaryotic host this tool's central trade — spend CAI to buy an
+accessible start — is the wrong way round, and `--head-samples 0` is not a minor
+tuning choice but the correct default. mRNA decay machinery differs too
+(*B. subtilis* runs on RNase Y/J rather than RNase E), so nothing about
+half-life transfers between hosts either.
+
 ## Reproducibility
 
 DnaChisel's search is stochastic. `--seed` (default `0`) makes a batch reproduce
@@ -96,6 +125,36 @@ codon-order-complexity --check-auth
 ```
 
 Currently implemented for IDT's SciTools Plus API (eBlock complexity screening).
+
+## Why not just DnaChisel?
+
+If all you want is CAI, use DnaChisel directly. `DnaOptimizationProblem` with
+`MaximizeCAI` is the same thing, and this wrapper adds nothing over it.
+
+That is rarely what you want, for two reasons. Maximising CAI alone produces
+exactly the repeat-rich, structured sequences a vendor will refuse to build. And
+CAI is the weak lever on expression anyway — see
+[Initiation, not stability](#initiation-not-stability). What this adds on top of
+the library:
+
+- **a curated constraint set** for expression in a bacterial host. DnaChisel
+  ships the machinery; the opinion about what to forbid — homopolymers,
+  polymerase pausing sites, internal Shine–Dalgarno, strong RBS, Chi site,
+  cryptic starts, GC bands — is the part that took work, and it is inherited
+  from SAPP/DMX rather than invented here;
+- **`MinimizeNumKmers`**, repeat suppression as a *scored objective* whose weight
+  can be ramped. DnaChisel's uniqueness spec is a constraint: it passes or it
+  fails, so it cannot be pushed harder on the fragments that need it;
+- **the vendor complexity gate and the ramp that clears it** — the loop this tool
+  exists to automate. None of that is DnaChisel;
+- **the two-stage 5′ selection**, which needs ViennaRNA and a freeze between the
+  stages;
+- **a fix to upstream's relaxed retry**, which deep-copies its constraint list
+  before appending the GC constraints and so silently drops the GC bands when it
+  retries (50-bp windows reached 72 % GC that way). Here the relaxed set differs
+  from the strict one only by the alternative-start patterns;
+- **the parts around the sequence**: verbatim flanks, padding, an order sheet,
+  and a parameter record that regenerates the batch byte for byte.
 
 ## Pitfalls
 
@@ -178,7 +237,9 @@ follow a coarser classification:
 | anything else | generic patterns only |
 
 For a eukaryote that is not enough on its own: you also want Kozak context,
-CpG and splice-site handling, and you should pass `--head-samples 0`. Add the
+CpG and splice-site handling, and you should pass `--head-samples 0` — see
+[Initiation, not stability](#initiation-not-stability) for why that is the
+correct default there rather than a tuning choice. Add the
 species to `BACTERIAL_SPECIES` in `src/codon_order/optimize.py` if you are
 working with a bacterium that is not listed.
 
