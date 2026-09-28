@@ -112,6 +112,29 @@ tuning choice but the correct default. mRNA decay machinery differs too
 (*B. subtilis* runs on RNase Y/J rather than RNase E), so nothing about
 half-life transfers between hosts either.
 
+## More expression is not always better
+
+This tool removes an accidental handicap — a start codon buried in structure —
+it does not set your expression level. Those are different things, and treating
+them as one leads somewhere bad.
+
+Plenty of targets are worse off at a high rate. Membrane proteins, proteases and
+nucleases are toxic to the host. Fast initiation raises the local concentration
+of nascent chains and drives aggregation, so the *soluble* yield can peak well
+below the maximum rate. Burden shows up as slow growth, plasmid loss, and
+suppressor mutants you discover by sequencing a revertant. There is also a
+reasonable argument — contested, but worth knowing — that a deliberately slow
+start aids co-translational folding, which uniform CAI maximisation erases.
+
+If you want less expression, take it from the parts built for it: promoter, RBS
+strength, inducer concentration, temperature, a tighter host. **Do not take it by
+leaving a hairpin at the start.** A structured start lowers expression by an
+amount nobody can predict or measure, varies between constructs, and is invisible
+in a plasmid map. An inducer titration is a dial you can read, report and repeat.
+
+So: make the start accessible, then tune the level deliberately. The point is
+that when you turn it down, you are choosing to.
+
 ## Reproducibility
 
 DnaChisel's search is stochastic. `--seed` (default `0`) makes a batch reproduce
