@@ -30,8 +30,14 @@ wrote batch1.meta.json
 ```bash
 conda env create -f environment.yml && conda activate codon-order
 # or, into an existing environment:
-pip install -e .
+pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.0"
 ```
+
+**Pin the tag when a batch matters.** An upgrade can change the DNA a given set
+of parameters produces, so `main` is the right thing to follow while you are
+exploring and the wrong thing to have installed when you re-order. Every run
+records the version it used in `<prefix>.meta.json`; see
+[CHANGELOG.md](CHANGELOG.md).
 
 Needs Python ≥ 3.11. ViennaRNA is a hard requirement for the 5′-structure stage;
 without it that stage is skipped and the run still completes.

@@ -40,8 +40,26 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import __version__
 from . import optimize as core
 from .idt import ComplexityClient, credentials_available, load_env
+
+
+def dependency_versions() -> dict[str, str]:
+    """Versions of everything that can move the output.
+
+    DnaChisel drives the search, python_codon_tables supplies the CAI weights,
+    ViennaRNA supplies the folding parameters and numpy seeds part of the search.
+    A batch is only reproducible against the same set.
+    """
+    out: dict[str, str] = {}
+    for mod, attr in (("dnachisel", "__version__"), ("python_codon_tables", "__version__"),
+                      ("RNA", "__version__"), ("numpy", "__version__")):
+        try:
+            out[mod] = str(getattr(__import__(mod), attr, "unknown"))
+        except ImportError:
+            out[mod] = "not installed"
+    return out
 
 REQUIRED = ("name", "protein")
 OPTIONAL = ("adapter5", "adapter3", "stop", "utr5", "species")
@@ -229,6 +247,11 @@ def main(argv=None) -> None:
         "elapsed_s": round(elapsed, 1),
         "input": str(args.input),
         "fragments": len(out),
+        # Parameters alone do not pin an output: the search, the codon tables and
+        # the folding parameters all live in versioned code. Record them, or
+        # "reproducible" is only true until something is upgraded.
+        "codon_order_version": __version__,
+        "dependencies": dependency_versions(),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "parameters": {k: v for k, v in vars(args).items() if k != "input"},

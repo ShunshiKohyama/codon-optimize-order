@@ -28,8 +28,13 @@ wrote batch1.meta.json
 ```bash
 conda env create -f environment.yml && conda activate codon-order
 # 既存の環境に入れる場合:
-pip install -e .
+pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.0"
 ```
+
+**重要なバッチではタグを固定してください。** アップグレードで、**同じパラメータから
+出る DNA が変わりうる**ためです。探索中は `main` を追ってよいですが、
+**再発注するときに `main` が入っているのは誤り**です。各実行は使用したバージョンを
+`<prefix>.meta.json` に記録します。[CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 Python 3.11 以上が必要です。ViennaRNA は 5' 構造の段に必須で、無い場合はその段が
 スキップされて実行は完走します。
