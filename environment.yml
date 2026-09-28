@@ -1,0 +1,17 @@
+# Loosely pinned on purpose: exact-build pins are what break a conda env after
+# an OS update. Python is held at >=3.11 so a current scipy/numpy is installable.
+name: codon-order
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11,<3.14
+  - pip
+  - numpy
+  - pandas
+  - biopython
+  - requests
+  - pip:
+      - dnachisel
+      - python-codon-tables
+      - ViennaRNA
+      - -e .

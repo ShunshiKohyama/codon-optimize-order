@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codon-order"
+version = "0.1.0"
+description = "Codon-optimize proteins for synthesis and gate each fragment on manufacturability"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "dnachisel>=3.2",
+    "python-codon-tables>=0.1",
+    "ViennaRNA>=2.6",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "requests>=2.28",
+    "biopython>=1.81",
+]
+
+[project.scripts]
+codon-order = "codon_order.cli:main"
+codon-order-complexity = "codon_order.idt:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
