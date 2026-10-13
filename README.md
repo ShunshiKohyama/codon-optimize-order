@@ -30,7 +30,7 @@ wrote batch1.meta.json
 ```bash
 conda env create -f environment.yml && conda activate codon-order
 # or, into an existing environment:
-pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.0"
+pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.1"
 ```
 
 **Pin the tag when a batch matters.** An upgrade can change the DNA a given set

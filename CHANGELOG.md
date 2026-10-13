@@ -7,7 +7,7 @@ moves the output (DnaChisel, python_codon_tables, ViennaRNA, numpy). **Pin a tag
 when a batch matters**, and keep the `meta.json` with the order:
 
 ```bash
-pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.0"
+pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.1"
 ```
 
 Versions follow [semantic versioning](https://semver.org/) with one addition:

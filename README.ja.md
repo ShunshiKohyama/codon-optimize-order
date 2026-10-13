@@ -28,7 +28,7 @@ wrote batch1.meta.json
 ```bash
 conda env create -f environment.yml && conda activate codon-order
 # 既存の環境に入れる場合:
-pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.0"
+pip install "git+https://github.com/ShunshiKohyama/codon-optimize-order@v0.1.1"
 ```
 
 **重要なバッチではタグを固定してください。** アップグレードで、**同じパラメータから
