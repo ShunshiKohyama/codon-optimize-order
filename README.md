@@ -223,6 +223,17 @@ CAI) but the benefit is zero, and the same goes for a eukaryotic host, where
 initiation is cap-dependent scanning and the bacterial result does not transfer.
 Use `--head-samples 0`.
 
+### Some N termini cannot avoid the cryptic-start patterns
+
+For a few proteins **no synonymous codon choice** keeps a G/A-rich stretch off the
+five positions upstream of an internal ATG — the mCherry family (`…GEEDNM…`) is
+one: the Glu-Glu-Asp-Asn codons are purine-rich whichever you pick. Stage 1 then
+uses the heads that fail *only* those patterns (every other pattern and the GC
+bands still apply), stage 2 skips its strict rung, and the row is marked
+`alt_start_relaxed = True`. Nothing changes for a protein that has a clean head.
+Before v0.1.1 such a run stopped with
+`NoSolutionError: no valid head in 8000 samples`. See `docs/design.md`.
+
 ### `dg_open_5p` is not calibrated
 
 Treat the absolute value as meaningless and the **rank within your batch**

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codon-order"
-version = "0.1.0"
+version = "0.1.1"
 description = "Codon-optimize proteins for synthesis and gate each fragment on manufacturability"
 readme = "README.md"
 requires-python = ">=3.11"

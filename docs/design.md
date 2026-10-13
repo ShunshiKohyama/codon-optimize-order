@@ -53,6 +53,34 @@ footprint moved a fixed head's `dg_open_5p` by 9–10 kcal/mol — as much as th
 head itself. So the frozen region is the whole folded window (20 codons), not
 just the footprint (12 codons).
 
+### Stage 1 gives up the cryptic-start patterns when it has to
+
+Stage 2 already has a relaxation ladder: if the *E. coli* cryptic-start patterns
+(`RRRRRNNNNNDTG` and its spacing variants) cannot be satisfied, it drops them
+first and reports `alt_start_relaxed`. Stage 1 filters its sampled heads with the
+same pattern set, and for some N termini **no synonymous choice can satisfy it**:
+a Met after a Glu-Glu-Asp-Asn run (the mCherry family, `…GEEDNM…`) always has
+purine-rich codons in the five positions upstream of its ATG, whichever codons are
+picked. Every sampled head then fails, and the run used to stop with
+`NoSolutionError: no valid head in 8000 samples`.
+
+Now a head that fails **only** the cryptic-start patterns (and passes every other
+pattern and the GC bands) is held back. If some head passes the full set, nothing
+changes: the same samples are drawn and ranked, so a batch that ran before gives
+the same sequences. Only if none does are the held-back heads scored and used, and
+they are marked `alt_start_relaxed`. Stage 2 is then told not to try the strict
+rung (`alt_start=False`), since the frozen head contains the pattern and that rung
+can only fail. If even the relaxed filter leaves no head (GC bands or
+Shine–Dalgarno patterns unsatisfiable), the gene falls back to single-stage
+optimisation with a printed note, as it already does when stage 2 cannot complete
+any head.
+
+Rejected: dropping the cryptic-start patterns from stage 1 always. They exist for
+a reason (a purine-rich stretch ahead of an internal ATG/GTG/TTG can initiate
+there), so they stay on whenever they can be met. For the mCherry family the
+pattern is a property of the *protein*, not of the codon choice, so the relaxed
+head is no worse than any other.
+
 ### Why 5′ structure and not CAI
 
 **CAI does not predict expression; initiation does.** Kudla et al.

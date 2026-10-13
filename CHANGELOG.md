@@ -14,6 +14,38 @@ Versions follow [semantic versioning](https://semver.org/) with one addition:
 **a change that alters designed sequences under unchanged parameters is a major
 change**, even if no interface moves.
 
+## v0.1.1 — 2026-10-13
+
+**Fixed**
+
+- Stage 1 (head selection) crashed with
+  `NoSolutionError: no valid head in 8000 samples` for N termini whose every
+  synonymous head matches an *E. coli* cryptic-start pattern. Seen with the mCherry
+  family (`…GEEDNM…`: a Met after Glu-Glu-Asp-Asn). Stage 2 already dropped those
+  patterns when they were unsatisfiable; stage 1 had no equivalent, and the
+  exception was not caught.
+  Heads that fail **only** the cryptic-start patterns are now held back and used
+  only when no head passes the full set. The row is then marked
+  `alt_start_relaxed`, and stage 2 starts below its strict rung
+  (`reverse_translate(..., alt_start=False)`) instead of failing at it first. If even
+  the relaxed filter leaves no head, the gene falls back to single-stage
+  optimisation with a printed note instead of crashing. See `docs/design.md`.
+
+**Added**
+
+- `relax_alt_start` (`optimize_head`) and `alt_start` (`reverse_translate`);
+  `relax_alt_start=False` restores the old all-or-nothing filter.
+- `tests/test_stage1_relaxation.py` (`PYTHONPATH=src python -m unittest discover -s tests`).
+
+**Why this is a patch, not a major change.** No designed sequence changes for an
+input that has a head passing the full pattern set: the same samples are drawn and
+ranked. Checked under the same seed against v0.1.0 — `examples/fragments.csv`
+(2 rows, every output column identical) and a 14-protein panel (ubiquitin,
+thioredoxin, the sfGFP example, ten random 120-mers, one mCherry-family protein):
+13 of 13 inputs that ran before give byte-identical sequences, and the mCherry-family
+protein, which crashed, now completes. Sequences for inputs that used to crash are
+new by definition and depend on this version: keep the `meta.json`.
+
 ## v0.1.0 — 2026-09-28
 
 First release. Extracted from a project pipeline and made host- and

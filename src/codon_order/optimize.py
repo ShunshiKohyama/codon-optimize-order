@@ -242,8 +242,14 @@ def reverse_translate(
     max_tries: int = 20,
     max_gc_start: float | None = None,
     frozen_head: str | None = None,
+    alt_start: bool = True,
 ) -> tuple[str, bool, bool]:
     """Optimise a DNA sequence coding for ``aa_sequence``.
+
+    ``alt_start=False`` starts the ladder below its first rung, i.e. does not try the
+    cryptic-start patterns at all.  Use it when a frozen head was chosen under
+    relaxation (``optimize_head`` reported ``alt_start_relaxed``): that head
+    contains the pattern, so the strict rung can only fail.
 
     Returns ``(dna, alt_start_relaxed, at_rich_relaxed)``.  The ORF carries
     ``stop_codon`` when one is given; the stop itself is frozen, but patterns and
@@ -283,7 +289,7 @@ def reverse_translate(
 
     # Relaxation ladder, most constrained first. Alt-start suppression is dropped
     # before the AT-rich head because the head buys more expression.
-    rungs = [(True, max_gc_start)]
+    rungs = [(True, max_gc_start)] if (alt_start or species != "e_coli") else []
     if species == "e_coli":
         rungs.append((False, max_gc_start))
     if max_gc_start is not None:
@@ -461,15 +467,22 @@ def five_prime_accessibility(
     }
 
 
-def _forbidden_regexes(species: str, enzyme_sites: tuple[str, ...]) -> list:
-    """Every sequence pattern the ORF must not contain, as compiled regexes."""
+def _forbidden_regexes(species: str, enzyme_sites: tuple[str, ...],
+                       with_alt_start: bool = True) -> list:
+    """Every sequence pattern the ORF must not contain, as compiled regexes.
+
+    ``with_alt_start=False`` leaves out the *E. coli* cryptic-start patterns, the
+    one class stage 2 also gives up first (see ``reverse_translate``).
+    """
     import re
 
     patterns = [p for p, _ in GENERIC_AVOID] + list(enzyme_sites)
     if is_bacterial(species):
         patterns += [p for p, _ in BACTERIAL_AVOID]
     if is_ecoli(species):
-        patterns += [p for p, _ in ECOLI_AVOID] + list(ECOLI_ALT_START)
+        patterns += [p for p, _ in ECOLI_AVOID]
+        if with_alt_start:
+            patterns += list(ECOLI_ALT_START)
     return [re.compile("".join(IUPAC[b] for b in p)) for p in patterns]
 
 
@@ -481,6 +494,7 @@ def optimize_head(
     n_samples: int = 8000,
     rng: random.Random | None = None,
     n_best: int = 25,
+    relax_alt_start: bool = True,
 ) -> list[dict]:
     """Stage 1 — choose the folded window's codons for maximum start accessibility.
 
@@ -506,6 +520,18 @@ def optimize_head(
 
     Candidates must satisfy the same pattern and GC-window constraints stage 2
     enforces, since stage 2 cannot fix a frozen head.
+
+    **Relaxation.**  Stage 2 gives up the *E. coli* cryptic-start patterns when
+    they are unsatisfiable; stage 1 has to be able to as well, because for some
+    N termini they are unsatisfiable *whatever synonymous codons are chosen* —
+    e.g. a Met after a Glu-Glu-Asp-Asn run (the mCherry family, ``...GEEDNM...``):
+    the purine-rich codons of those residues put a G/A-rich stretch upstream of
+    the Met's ATG every time, so every sampled head matched and none survived.
+    Heads that fail *only* those patterns are therefore kept aside and, if (and
+    only if) no head passes the full set, scored instead; each returned candidate
+    carries ``alt_start_relaxed`` so the caller can tell.  When some head passes
+    the full set nothing changes: the same samples are drawn, ranked and returned
+    as before.  ``relax_alt_start=False`` restores the old all-or-nothing filter.
     """
     import python_codon_tables as pct
 
@@ -517,10 +543,19 @@ def optimize_head(
         raise ValueError(f"no codons for residue(s) {missing}")
 
     forbidden = _forbidden_regexes(species, enzyme_sites)
+    forbidden_relaxed = _forbidden_regexes(species, enzyme_sites, with_alt_start=False)
+    can_relax = relax_alt_start and is_ecoli(species)
     wlo, whi, window = GC_WINDOW
     scored: list[dict] = []
+    held_back: list[str] = []      # fail only the cryptic-start patterns; used only if nothing else survives
     seen: set[str] = set()
     evaluated = 0
+
+    def gc_ok(head: str) -> bool:
+        if not GC_GLOBAL[0] <= gc_fraction(head) <= GC_GLOBAL[1]:
+            return False
+        lo, hi = window_gc_range(head, window)
+        return wlo <= lo and hi <= whi
 
     for _ in range(n_samples):
         head = "".join(rng.choice(synonyms[aa]) for aa in aa_head)
@@ -528,21 +563,28 @@ def optimize_head(
             continue
         seen.add(head)
         if any(r.search(head) for r in forbidden):
+            if can_relax and not any(r.search(head) for r in forbidden_relaxed) and gc_ok(head):
+                held_back.append(head)
             continue
-        if not GC_GLOBAL[0] <= gc_fraction(head) <= GC_GLOBAL[1]:
-            continue
-        lo, hi = window_gc_range(head, window)
-        if lo < wlo or hi > whi:
+        if not gc_ok(head):
             continue
         evaluated += 1
         acc = five_prime_accessibility(head, utr5, fold_orf_nt=len(head))
         scored.append({"head": head, **acc})
+
+    relaxed = False
+    if not scored and held_back:
+        relaxed = True
+        for head in held_back:
+            evaluated += 1
+            scored.append({"head": head, **five_prime_accessibility(head, utr5, fold_orf_nt=len(head))})
 
     if not scored:
         raise NoSolutionError(f"no valid head in {n_samples} samples", None)
     scored.sort(key=lambda c: c["dg_open_5p"])
     for candidate in scored[:n_best]:
         candidate["evaluated"] = evaluated
+        candidate["alt_start_relaxed"] = relaxed
     return scored[:n_best]
 
 
@@ -689,33 +731,45 @@ def optimize_gene(
     # synthesis complexity, and it can no longer perturb the start's accessibility.
     head = None
     head_rank = 0
+    head_relaxed = False
     if args.head_samples > 0 and five_prime_accessibility("ATGAAA")["dg_open_5p"] is not None:
         n_head = min(HEAD_CODONS, len(aa_sequence))
-        candidates = optimize_head(
-            aa_sequence[:n_head], utr5=args.utr5, species=args.species,
-            enzyme_sites=tuple(args.avoid), n_samples=args.head_samples, rng=rng,
-        )
+        try:
+            candidates = optimize_head(
+                aa_sequence[:n_head], utr5=args.utr5, species=args.species,
+                enzyme_sites=tuple(args.avoid), n_samples=args.head_samples, rng=rng,
+            )
+        except NoSolutionError as exc:
+            # Not even the relaxed filter left a head (e.g. the GC bands or the
+            # Shine-Dalgarno patterns cannot be met by any synonymous choice).
+            print(f"    stage 1: {exc} — falling back to single-stage optimisation")
+            candidates = []
         # Take the most accessible head stage 2 can actually complete: the very
         # best can be infeasible downstream, at a dG cost of a fraction of a
         # kcal/mol to step past it.
         for rank, candidate in enumerate(candidates, start=1):
+            relaxed = candidate.get("alt_start_relaxed", False)
             np.random.seed(args.seed)
             try:
                 reverse_translate(
                     aa_sequence, species=args.species, kmers_weight=float(weights[0]),
                     enzyme_sites=tuple(args.avoid), stop_codon=args.stop or None,
                     max_tries=args.max_attempts, frozen_head=candidate["head"],
+                    alt_start=not relaxed,
                 )
             except (NoSolutionError, ValueError):
                 continue
-            head, head_rank = candidate["head"], rank
+            head, head_rank, head_relaxed = candidate["head"], rank, relaxed
+            note = ("; cryptic-start patterns relaxed for the head — every synonymous "
+                    "head matches them" if relaxed else "")
             print(f"    stage 1: {candidate['evaluated']} valid heads -> "
                   f"dG_open {candidate['dg_open_5p']:.1f} kcal/mol, "
-                  f"rank {rank} feasible ({n_head} codons frozen)")
+                  f"rank {rank} feasible ({n_head} codons frozen{note})")
             break
         else:
-            print(f"    stage 1: none of {len(candidates)} heads left stage 2 a "
-                  f"solution — falling back to single-stage optimisation")
+            if candidates:
+                print(f"    stage 1: none of {len(candidates)} heads left stage 2 a "
+                      f"solution — falling back to single-stage optimisation")
 
     def rank(row: dict) -> tuple:
         """Lower is better: clean, then accessible 5', then complexity, repeats.
@@ -751,7 +805,7 @@ def optimize_gene(
                 max_tries=args.max_attempts,
                 max_gc_start=(None if head is not None or args.max_gc_start >= 1.0
                               else args.max_gc_start),
-                frozen_head=head,
+                frozen_head=head, alt_start=not head_relaxed,
             )
         except (NoSolutionError, ValueError) as exc:
             print(f"    step {step}.{draw}: no solution ({type(exc).__name__})")
